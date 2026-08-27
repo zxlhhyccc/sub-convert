@@ -28,10 +28,11 @@ export class Confuse {
         const { searchParams } = new URL(request.url);
         const vpsUrl = searchParams.get('url');
         const protocol = searchParams.get('protocol');
+        const exclude = searchParams.get('exclude');
         this.backend = searchParams.get('backend') ?? this.backend;
 
         const vps = vpsUrl!.split(/\||\n/).filter(Boolean);
-        this.parser = new Parser(vps, [], protocol);
+        this.parser = new Parser(vps, [], protocol, exclude);
         this.vps = vps;
 
         await this.parser.parse(vps);

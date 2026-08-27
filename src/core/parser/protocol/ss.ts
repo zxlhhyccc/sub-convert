@@ -22,6 +22,8 @@ export class SsParser extends Faker {
     /** * @description 混淆备注 */
     #confusePs: string = '';
 
+    #tag: string = '';
+
     constructor(v: string) {
         super();
         this.#confusePs = crypto.randomUUID();
@@ -40,6 +42,7 @@ export class SsParser extends Faker {
         this.#originLink = _v;
         this.#originConfig = new URL(_v);
         this.#originPs = this.#originConfig.hash ?? '';
+        this.#tag = this.getTag(this.#originConfig.hash) ?? '';
     }
 
     /**
@@ -125,6 +128,10 @@ export class SsParser extends Faker {
      */
     get confuseConfig(): Partial<SsConfig> {
         return this.#confuseConfig;
+    }
+
+    get tag(): string | null {
+        return this.#tag ?? null;
     }
 
     /**

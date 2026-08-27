@@ -23,10 +23,8 @@ export function hysteria2Convert(config: Record<string, any>): string {
     if (sni) {
         parameters.append('sni', sni);
     }
-    // insecure 参数对应 skip-cert-verify
-    if (config.insecure || config['skip-cert-verify']) {
-        parameters.append('insecure', '1');
-    }
+    const insecure = config.insecure ?? config['skip-cert-verify'];
+    if (typeof insecure === 'boolean') parameters.append('insecure', insecure ? '1' : '0');
     if (config.alpn && (typeof config.alpn === 'string' || Array.isArray(config.alpn))) {
         parameters.append('alpn', Array.isArray(config.alpn) ? config.alpn.join(',') : config.alpn);
     }
@@ -58,4 +56,3 @@ export function hysteria2Convert(config: Record<string, any>): string {
 
     return hysteria2Url;
 }
-

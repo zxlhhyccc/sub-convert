@@ -22,6 +22,8 @@ export class SsrParser extends Faker {
     /** * @description 混淆备注 */
     #confusePs: string = '';
 
+    #tag: string = '';
+
     public constructor(v: string) {
         super();
         this.#confusePs = crypto.randomUUID();
@@ -40,9 +42,9 @@ export class SsrParser extends Faker {
         this.#originLink = v;
         this.#originConfig = this.getOriginConfig(base64Decode(config));
         this.#originPs = this.#originConfig.remarks ?? '';
+        this.#tag = this.getTag(this.#originConfig.remarks) ?? '';
     }
 
-    // oxo.08050611.xyz:10000:origin:aes-256-cfb:plain:NlJWUHp2bVQ1MCthdTNXajBCL2hiTTJ6VVZ5bWxVQTJkbkx3aXZDMFR5TT0/?remarks=5rWL6K-Vc3Ny&protoparam=&obfsparam=
     private getOriginConfig(v: string): SsrConfig {
         const [server, port, protocol, method, obfs, password] = v.split(':');
         const params = new URL(v);
@@ -142,6 +144,10 @@ export class SsrParser extends Faker {
      */
     get confuseConfig(): Partial<SsrConfig> {
         return this.#confuseConfig;
+    }
+
+    get tag(): string | null {
+        return this.#tag ?? null;
     }
 }
 

@@ -1,9 +1,11 @@
 import type { ClashType } from 'src/types';
+import { anytlsConvert } from './protocol/anytls';
 import { hysteriaConvert } from './protocol/hysteria';
 import { hysteria2Convert } from './protocol/hysteria2';
 import { shadowsocksConvert } from './protocol/shadowsocks';
 import { shadowsocksRConvert } from './protocol/shadowsocksR';
 import { trojanConvert } from './protocol/trojan';
+import { tuicConvert } from './protocol/tuic';
 import { vlessConvert } from './protocol/vless';
 import { vmessConvert } from './protocol/vmess';
 
@@ -11,6 +13,10 @@ export function getYamlProxies(proxies: ClashType['proxies']): string[] {
     const proxiesList: string[] = [];
     for (const proxy of proxies) {
         try {
+            if (proxy.type === 'anytls') {
+                proxiesList.push(anytlsConvert(proxy));
+            }
+
             if (proxy.type === 'vmess') {
                 proxiesList.push(vmessConvert(proxy));
             }
@@ -37,6 +43,10 @@ export function getYamlProxies(proxies: ClashType['proxies']): string[] {
             if (proxy.type === 'hysteria') {
                 proxiesList.push(hysteriaConvert(proxy));
             }
+
+            if (proxy.type === 'tuic') {
+                proxiesList.push(tuicConvert(proxy));
+            }
         } catch {
             continue;
         }
@@ -44,4 +54,3 @@ export function getYamlProxies(proxies: ClashType['proxies']): string[] {
 
     return proxiesList;
 }
-

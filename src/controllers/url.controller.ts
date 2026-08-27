@@ -1,112 +1,123 @@
+import type { Context } from 'hono';
+import type { AppBindings } from '../bindings';
 import type { UrlService } from '../services/url.service';
+import { HTTPException } from 'hono/http-exception';
 import { getTargetConfig } from '../page/config/targetConfig';
-import { ResponseUtil } from '../shared/response';
+import { getConfiguredAdminKey, safeEqualString } from '../shared/adminKey';
 
 export class UrlController {
-    constructor(private service: UrlService) {}
+    constructor(private readonly service: UrlService) {}
 
-    async toSub(request: Request, env: Env): Promise<Response> {
-        try {
-            const convertType = new URL(request.url).searchParams.get('target');
-            if (!convertType) {
-                return ResponseUtil.error('Unsupported client type');
-            }
-
-            const targetConfig = getTargetConfig();
-            const supportList = targetConfig.map(item => item.value);
-
-            if (!supportList.includes(convertType)) {
-                return ResponseUtil.error(`Unsupported client type, support list: ${supportList.join(', ')}`);
-            }
-
-            const subConfig = await this.service.toSub(request, env, convertType);
-            return ResponseUtil.cors(subConfig);
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+    async toSub(c: Context<AppBindings>): Promise<Response> {
+        const convertType = c.req.query('target');
+        if (!convertType) {
+            throw new HTTPException(400, { message: 'Unsupported client type' });
         }
-    }
 
-    async getVersion(request: Request, env: Env): Promise<Response> {
-        return this.service.getVersion(request, env);
-    }
-
-    async add(request: Request): Promise<Response> {
-        try {
-            const { long_url, serve } = await request.json<{ long_url: string; serve?: string }>();
-            if (!long_url) {
-                return ResponseUtil.error('Missing long_url');
-            }
-
-            const url = new URL(request.url);
-            const baseUrl = serve || `${url.protocol}//${url.host}`;
-
-            const result = await this.service.add(long_url, baseUrl);
-            return ResponseUtil.success(result);
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+        const supportList = getTargetConfig().map(item => item.value);
+        if (!supportList.includes(convertType)) {
+            throw new HTTPException(400, {
+                message: `Unsupported client type, support list: ${supportList.join(', ')}`
+            });
         }
+
+        const { body, contentType } = await this.service.toSub(c.req.raw, c.env, convertType);
+        return c.body(body, 200, {
+            'Content-Type': contentType,
+            'Cache-Control': 'no-store'
+        });
     }
 
-    async delete(request: Request): Promise<Response> {
-        try {
-            const url = new URL(request.url);
-            const code = url.searchParams.get('code');
+    async getVersion(c: Context<AppBindings>): Promise<Response> {
+        const url = this.service.getVersionRedirect(c.req.raw, c.env);
+        return c.redirect(url, 302);
+    }
 
-            if (!code) {
-                return ResponseUtil.error('Missing code');
-            }
-
-            await this.service.deleteByCode(code);
-            return ResponseUtil.success({ deleted: true });
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+    async add(c: Context<AppBindings>): Promise<Response> {
+        const payload = await c.req.json<{ long_url?: string; serve?: string }>();
+        if (!payload?.long_url) {
+            throw new HTTPException(400, { message: 'Missing long_url' });
         }
+
+        const url = new URL(c.req.url);
+        const baseUrl = payload.serve || `${url.protocol}//${url.host}`;
+        const result = await this.service.add(payload.long_url, baseUrl);
+        return c.json({ data: result });
     }
 
-    async queryByCode(request: Request): Promise<Response> {
-        try {
-            const url = new URL(request.url);
-            const code = url.searchParams.get('code');
-
-            if (!code) {
-                return ResponseUtil.error('Missing code');
-            }
-
-            const result = await this.service.getByCode(code);
-            return result ? ResponseUtil.success(result) : ResponseUtil.error('Not found', 404);
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+    async verifyAdmin(c: Context<AppBindings>): Promise<Response> {
+        if (c.env.SHORT_URL_ENABLED !== true) {
+            throw new HTTPException(503, { message: '短链服务未启用' });
         }
-    }
 
-    async queryList(request: Request): Promise<Response> {
-        try {
-            const url = new URL(request.url);
-            const page = Number.parseInt(url.searchParams.get('page') || '1');
-            const pageSize = Number.parseInt(url.searchParams.get('pageSize') || '10');
-
-            const result = await this.service.getList(page, pageSize);
-            return ResponseUtil.success(result);
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+        const configured = getConfiguredAdminKey(c.env);
+        if (!configured) {
+            throw new HTTPException(503, { message: '请先配置 SHORT_URL_KEY' });
         }
+
+        const payload = await c.req.json<{ key?: string }>().catch(() => ({ key: '' }));
+        const key = payload?.key?.trim() ?? '';
+        if (!key || !safeEqualString(key, configured)) {
+            throw new HTTPException(401, { message: '密钥不正确' });
+        }
+
+        return c.json({ data: { ok: true } });
     }
 
-    async redirect(request: Request): Promise<Response> {
-        try {
-            const code = request.params?.code;
-            if (!code) {
-                return ResponseUtil.error('Invalid short URL');
-            }
+    async delete(c: Context<AppBindings>): Promise<Response> {
+        this.assertAdminKey(c);
+        const code = c.req.query('code');
+        if (!code) {
+            throw new HTTPException(400, { message: 'Missing code' });
+        }
+        await this.service.deleteByCode(code);
+        return c.json({ data: { deleted: true } });
+    }
 
-            const result = await this.service.getByCode(code);
-            if (result) {
-                return Response.redirect(result.long_url, 302);
-            }
-            return ResponseUtil.error('Not found', 404);
-        } catch (error: any) {
-            return ResponseUtil.error(error.message || 'Invalid request');
+    async queryByCode(c: Context<AppBindings>): Promise<Response> {
+        this.assertAdminKey(c);
+        const code = c.req.query('code');
+        if (!code) {
+            throw new HTTPException(400, { message: 'Missing code' });
+        }
+
+        const result = await this.service.getByCode(code);
+        if (!result) {
+            throw new HTTPException(404, { message: 'Not found' });
+        }
+        return c.json({ data: result });
+    }
+
+    async queryList(c: Context<AppBindings>): Promise<Response> {
+        this.assertAdminKey(c);
+        const page = Number.parseInt(c.req.query('page') || '1', 10);
+        const pageSize = Number.parseInt(c.req.query('pageSize') || '20', 10);
+        const result = await this.service.getList(page, pageSize);
+        return c.json({ data: result });
+    }
+
+    async redirect(c: Context<AppBindings>): Promise<Response> {
+        const code = c.req.param('code');
+        if (!code) {
+            throw new HTTPException(400, { message: 'Invalid short URL' });
+        }
+
+        const result = await this.service.getByCode(code);
+        if (!result) {
+            throw new HTTPException(404, { message: 'Not found' });
+        }
+        return c.redirect(result.long_url, 302);
+    }
+
+    private assertAdminKey(c: Context<AppBindings>): void {
+        const configured = getConfiguredAdminKey(c.env);
+        if (!configured) {
+            throw new HTTPException(503, { message: '请先配置 SHORT_URL_KEY' });
+        }
+
+        const provided = (c.req.header('X-Admin-Key') ?? '').trim();
+        if (!provided || !safeEqualString(provided, configured)) {
+            throw new HTTPException(401, { message: '密钥不正确' });
         }
     }
 }
-

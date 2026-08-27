@@ -18,7 +18,16 @@ export function SubMultiSelect(): string {
                     options: [],
                     isOpen: false
                 };
+                this.resizeObserver = new ResizeObserver(() => this.#updateCollapsedTags());
                 this.#render();
+            }
+
+            connectedCallback() {
+                this.resizeObserver.observe(this);
+            }
+
+            disconnectedCallback() {
+                this.resizeObserver.disconnect();
             }
 
             #injectStyle() {
@@ -46,7 +55,7 @@ export function SubMultiSelect(): string {
                         cursor: pointer;
                         transition: var(--transition);
                         display: flex;
-                        flex-wrap: wrap;
+                        flex-wrap: nowrap;
                         gap: 4px;
                         align-items: center;
                     }
@@ -79,6 +88,30 @@ export function SubMultiSelect(): string {
                         border-radius: var(--radius);
                         color: var(--text-primary);
                         gap: 2px;
+                        flex: none;
+                        white-space: nowrap;
+                    }
+
+                    .sub-multi-select__tags {
+                        display: flex;
+                        flex: 1;
+                        min-width: 0;
+                        gap: 4px;
+                        overflow: hidden;
+                    }
+
+                    .sub-multi-select__summary {
+                        flex: none;
+                        color: var(--primary-color);
+                        font-weight: 500;
+                    }
+
+                    .sub-multi-select__summary:hover {
+                        color: var(--primary-hover);
+                    }
+
+                    .sub-multi-select__summary[hidden] {
+                        display: none;
                     }
 
                     .sub-multi-select__tag-close {
@@ -241,6 +274,8 @@ export function SubMultiSelect(): string {
                     placeholder.textContent = this.getAttribute('placeholder') || '请选择';
                     wrapper.appendChild(placeholder);
                 } else {
+                    const tags = document.createElement('span');
+                    tags.className = 'sub-multi-select__tags';
                     this.state.value.forEach(value => {
                         const option = this.state.options.find(opt => opt.value === value);
                         if (option) {
@@ -262,12 +297,49 @@ export function SubMultiSelect(): string {
                                 this.#removeValue(value);
                             });
 
-                            wrapper.appendChild(tag);
+                            tags.appendChild(tag);
                         }
                     });
+
+                    const summary = document.createElement('span');
+                    summary.className = 'sub-multi-select__tag sub-multi-select__summary';
+                    summary.hidden = true;
+                    wrapper.append(tags, summary);
                 }
 
                 wrapper.appendChild(arrow);
+                requestAnimationFrame(() => this.#updateCollapsedTags());
+            }
+
+            #updateCollapsedTags() {
+                const wrapper = this.shadowRoot.querySelector('.sub-multi-select__wrapper');
+                const tags = wrapper?.querySelector('.sub-multi-select__tags');
+                const summary = wrapper?.querySelector('.sub-multi-select__summary');
+                if (!tags || !summary) return;
+
+                const tagList = Array.from(tags.children);
+                tagList.forEach(tag => (tag.hidden = false));
+                summary.hidden = true;
+
+                const gap = Number.parseFloat(getComputedStyle(tags).gap) || 0;
+                const totalWidth = tagList.reduce((width, tag, index) => width + tag.offsetWidth + (index ? gap : 0), 0);
+                if (totalWidth <= tags.clientWidth) return;
+
+                summary.hidden = false;
+                summary.textContent = '+' + tagList.length;
+                const availableWidth = tags.clientWidth - summary.offsetWidth - gap;
+                let usedWidth = 0;
+                let visibleCount = 0;
+
+                for (const tag of tagList) {
+                    const nextWidth = usedWidth + tag.offsetWidth + (visibleCount ? gap : 0);
+                    if (nextWidth > availableWidth) break;
+                    usedWidth = nextWidth;
+                    visibleCount += 1;
+                }
+
+                tagList.slice(visibleCount).forEach(tag => (tag.hidden = true));
+                summary.textContent = '+' + (tagList.length - visibleCount);
             }
 
             #removeValue(value) {
@@ -455,4 +527,3 @@ export function SubMultiSelect(): string {
         customElements.define('sub-multi-select', SubMultiSelect);
     </script>`;
 }
-

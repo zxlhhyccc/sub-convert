@@ -1,4 +1,10 @@
-export class Faker {
+import { Exclude } from './exclude';
+
+export class Faker extends Exclude {
+    constructor() {
+        super();
+    }
+
     readonly #hostnames = ['localhost', '127.0.0.1', 'abc.cba.com'];
     readonly #encryptionProtocol = ['AES_256_GCM', 'CHACHA20_POLY1305', 'AES_128_GCM', 'CHACHA20_IETF'];
     readonly #minPort = 1024;
@@ -55,3 +61,4 @@ export class Faker {
         return this.#encryptionProtocol[Math.floor(Math.random() * this.#encryptionProtocol.length)];
     }
 }
+

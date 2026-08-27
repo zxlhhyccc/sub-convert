@@ -1,9 +1,23 @@
-import { SubButton, SubCheckbox, SubForm, SubFormItem, SubInput, SubMessage, SubMultiSelect, SubSelect, SubTextarea } from './components';
+import {
+    SubButton,
+    SubCheckbox,
+    SubForm,
+    SubFormItem,
+    SubInput,
+    SubMessage,
+    SubModal,
+    SubMultiSelect,
+    SubSelect,
+    SubTextarea
+} from './components';
 import { getAdvancedConfig, getBackendConfig, getProtocolConfig, getRemoteConfig, getShortServeConfig, getTargetConfig } from './config';
 import { getDefaultBackend } from './config/backendConfig';
+import { getExcludeConfig } from './config/getExcludeConfig';
 import { theme } from './script/theme';
 import { layout } from './style/layout';
 import { style } from './style/style';
+
+export { showShortUrlPage } from './views/shortUrl/index';
 
 export function showPage(request: Request, env: Env): Response {
     const remoteConfig = getRemoteConfig(env);
@@ -12,9 +26,44 @@ export function showPage(request: Request, env: Env): Response {
     const targetConfig = getTargetConfig();
     const advancedConfig = getAdvancedConfig();
     const protocolConfig = getProtocolConfig();
+    const excludeConfig = getExcludeConfig();
     const defaultBackend = getDefaultBackend(request, env);
 
-    const hasDBConfig = env.DB !== undefined;
+    const hasDBConfig = env.SHORT_URL_ENABLED === true;
+    const hasChatConfig = Boolean(env.ORCA_ROUTER_TOKEN?.trim() && env.ORCA_ROUTER_MODEL?.trim());
+
+    const chatButton = hasChatConfig
+        ? `
+                            <button class="header__chat" id="open-chat-btn" type="button" aria-label="AI 助手">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <rect x="5" y="8" width="14" height="11" rx="3"></rect>
+                                    <circle cx="9.5" cy="13.5" r="1" fill="currentColor" stroke="none"></circle>
+                                    <circle cx="14.5" cy="13.5" r="1" fill="currentColor" stroke="none"></circle>
+                                    <path d="M12 8V4M9.5 4h5"></path>
+                                    <path d="M2.5 14h2.5M19 14h2.5"></path>
+                                </svg>
+                            </button>`
+        : '';
+
+    const chatModal = hasChatConfig
+        ? `
+                <sub-modal id="chat-modal" title="AI 助手">
+                    <div class="chat">
+                        <div class="chat__messages" id="chat-messages">
+                            <div class="chat__empty">有什么可以帮你？</div>
+                        </div>
+                        <div class="chat__composer">
+                            <textarea
+                                id="chat-input"
+                                class="chat__input"
+                                rows="1"
+                                placeholder="输入消息，Enter 发送"
+                            ></textarea>
+                            <sub-button id="chat-send-btn" type="primary">发送</sub-button>
+                        </div>
+                    </div>
+                </sub-modal>`
+        : '';
 
     const html = `  
     <!DOCTYPE html>
@@ -63,6 +112,83 @@ export function showPage(request: Request, env: Env): Response {
                         margin-top: 24px;
                         padding-right: 100px;
                     }
+
+                    .chat {
+                        display: flex;
+                        flex-direction: column;
+                        height: min(52vh, 420px);
+                        gap: 12px;
+                    }
+
+                    .chat__messages {
+                        flex: 1;
+                        min-height: 0;
+                        overflow: auto;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 8px;
+                    }
+
+                    .chat__empty {
+                        margin: auto;
+                        color: var(--text-secondary);
+                        font-size: 13px;
+                    }
+
+                    .chat__bubble {
+                        max-width: 85%;
+                        padding: 8px 12px;
+                        border-radius: var(--radius);
+                        font-size: 14px;
+                        line-height: 1.5;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                    }
+
+                    .chat__bubble--user {
+                        align-self: flex-end;
+                        background: var(--primary-color);
+                        color: #fff;
+                    }
+
+                    .chat__bubble--assistant {
+                        align-self: flex-start;
+                        background: var(--background-secondary);
+                        color: var(--text-primary);
+                    }
+
+                    .chat__bubble--pending {
+                        color: var(--text-secondary);
+                    }
+
+                    .chat__composer {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+
+                    .chat__input {
+                        flex: 1;
+                        min-height: 32px;
+                        max-height: 96px;
+                        resize: none;
+                        padding: 6px 11px;
+                        border: 1px solid var(--border-color);
+                        border-radius: var(--radius);
+                        background: var(--background);
+                        color: var(--text-primary);
+                        box-sizing: border-box;
+                        font-size: 14px;
+                        font-family: inherit;
+                        line-height: 1.5;
+                        outline: none;
+                        transition: var(--transition);
+                    }
+
+                    .chat__input:focus {
+                        border-color: var(--primary-color);
+                        box-shadow: 0 0 0 2px var(--shadow);
+                    }
                 </style>
             </head>
             <body>
@@ -89,7 +215,11 @@ export function showPage(request: Request, env: Env): Response {
 
                         <span class="header__title">订阅转换</span>
 
-                        <button class="header__theme"></button>
+                        <div class="header__right">
+                            <a class="header__nav" href="/shortUrl">短链管理</a>
+                            <button class="header__theme" type="button"></button>
+                            ${chatButton}
+                        </div>
                     </header>
 
                     <section>
@@ -114,8 +244,12 @@ export function showPage(request: Request, env: Env): Response {
                                 <sub-select key="backend" filterable></sub-select>
                             </sub-form-item>
 
-                            <sub-form-item label="包含节点">
+                            <sub-form-item label="节点协议">
                                 <sub-multi-select key="protocol"></sub-multi-select>
+                            </sub-form-item>
+
+                            <sub-form-item label="排除节点">
+                                <sub-multi-select key="exclude"></sub-multi-select>
                             </sub-form-item>
 
                             <sub-form-item label="高级选项">
@@ -179,6 +313,7 @@ export function showPage(request: Request, env: Env): Response {
                         </sub-form>
                     </section>
                 </main>
+                ${chatModal}
 
                 ${SubInput()}
                 ${SubTextarea()}
@@ -189,6 +324,7 @@ export function showPage(request: Request, env: Env): Response {
                 ${SubForm()}
                 ${SubButton()}
                 ${SubMessage()}
+                ${SubModal()}
 
                 <script>
                     const formConfig = {
@@ -208,6 +344,10 @@ export function showPage(request: Request, env: Env): Response {
                             type: 'sub-multi-select',
                             options: ${JSON.stringify(protocolConfig)}
                         },
+                        exclude: {
+                            type: 'sub-multi-select',
+                            options: ${JSON.stringify(excludeConfig)}
+                        },
                         advanced: {
                             type: 'sub-checkbox',
                             options: ${JSON.stringify(advancedConfig)}
@@ -224,6 +364,7 @@ export function showPage(request: Request, env: Env): Response {
                             config: '${remoteConfig[0].value}',
                             backend: '${defaultBackend}',
                             protocol: '${JSON.stringify(protocolConfig.map(item => item.value))}',
+                            exclude: '${JSON.stringify([])}',
                             advanced: ['emoji', 'new_name', 'udp'],
                             shortServe: '${shortServeConfig[0]?.value ?? ''}',
 
@@ -295,6 +436,7 @@ export function showPage(request: Request, env: Env): Response {
                                 url.searchParams.set('insert', 'true');
                                 url.searchParams.set('config', this.#model.config);
                                 url.searchParams.set('protocol', Array.isArray(this.#model.protocol) ? JSON.stringify(this.#model.protocol) : this.#model.protocol);
+                                url.searchParams.set('exclude', Array.isArray(this.#model.exclude) ? JSON.stringify(this.#model.exclude) : this.#model.exclude);
                                 
                                 const advancedOptions = this.#getAdvancedOptions(this.#model);
 
@@ -407,6 +549,95 @@ export function showPage(request: Request, env: Env): Response {
                     }
 
                     const sub = new Sub();
+
+                    class Chat {
+                        #history = [];
+                        #pending = false;
+                        #modal = document.querySelector('#chat-modal');
+                        #openBtn = document.querySelector('#open-chat-btn');
+                        #sendBtn = document.querySelector('#chat-send-btn');
+                        #input = document.querySelector('#chat-input');
+                        #list = document.querySelector('#chat-messages');
+
+                        constructor() {
+                            this.#openBtn.addEventListener('click', () => {
+                                this.#modal.open = true;
+                            });
+                            this.#modal.addEventListener('modal:open', () => {
+                                this.#input.focus();
+                            });
+                            this.#sendBtn.addEventListener('click', () => this.#send());
+                            this.#input.addEventListener('keydown', e => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    this.#send();
+                                }
+                            });
+                        }
+
+                        async #send() {
+                            const text = this.#input.value.trim();
+                            if (!text || this.#pending) return;
+
+                            this.#history.push({ role: 'user', content: text });
+                            this.#input.value = '';
+                            this.#pending = true;
+                            this.#sendBtn.setAttribute('disabled', '');
+                            this.#render(true);
+
+                            try {
+                                const response = await fetch('/api/chat', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ messages: this.#history })
+                                });
+                                const data = await response.json().catch(() => ({}));
+                                if (!response.ok) {
+                                    throw new Error(data.message || '请求失败');
+                                }
+                                this.#history.push({ role: 'assistant', content: data.data.content });
+                            } catch (error) {
+                                notification.error(error.message || '发送失败');
+                            } finally {
+                                this.#pending = false;
+                                this.#sendBtn.removeAttribute('disabled');
+                                this.#render(false);
+                                this.#input.focus();
+                            }
+                        }
+
+                        #render(pending) {
+                            this.#list.replaceChildren();
+                            if (this.#history.length === 0 && !pending) {
+                                const empty = document.createElement('div');
+                                empty.className = 'chat__empty';
+                                empty.textContent = '有什么可以帮你？';
+                                this.#list.appendChild(empty);
+                                return;
+                            }
+
+                            this.#history.forEach(item => {
+                                this.#appendBubble(item.role === 'user' ? 'user' : 'assistant', item.content);
+                            });
+                            if (pending) {
+                                this.#appendBubble('assistant pending', '思考中...');
+                            }
+                            this.#list.scrollTop = this.#list.scrollHeight;
+                        }
+
+                        #appendBubble(kind, content) {
+                            const bubble = document.createElement('div');
+                            const role = kind.startsWith('user') ? 'user' : 'assistant';
+                            bubble.className = 'chat__bubble chat__bubble--' + role;
+                            if (kind.includes('pending')) {
+                                bubble.classList.add('chat__bubble--pending');
+                            }
+                            bubble.textContent = content;
+                            this.#list.appendChild(bubble);
+                        }
+                    }
+
+                    ${hasChatConfig ? 'new Chat();' : ''}
 
                 </script>
             </body>

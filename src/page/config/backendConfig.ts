@@ -1,6 +1,6 @@
 export function getDefaultBackend(request: Request, env: Env): string {
     const { origin } = new URL(request.url);
-    return env.DEFAULT_BACKEND ?? origin;
+    return env.DEFAULT_BACKEND || origin;
 }
 
 export function getBackendConfig(request: Request, env: Env): { label: string; value: string }[] {

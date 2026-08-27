@@ -3,18 +3,22 @@ import type { ParserType } from './types';
 import { base64Decode, fetchWithRetry } from 'cloudflare-tools';
 import { load } from 'js-yaml';
 import { Convert } from '../convert';
+import { AnytlsParser } from './protocol/anytls';
 import { Hysteria2Parser } from './protocol/hysteria2';
 import { SsParser } from './protocol/ss';
 import { SsrParser } from './protocol/ssr';
 import { TrojanParser } from './protocol/trojan';
+import { TuicParser } from './protocol/tuic';
 import { VlessParser } from './protocol/vless';
 import { VmessParser } from './protocol/vmess';
 import { getYamlProxies } from './yaml';
 
+export * from './protocol/anytls';
 export * from './protocol/hysteria2';
 export * from './protocol/ss';
 export * from './protocol/ssr';
 export * from './protocol/trojan';
+export * from './protocol/tuic';
 export * from './protocol/vless';
 export * from './protocol/vmess';
 
@@ -25,11 +29,12 @@ export class Parser extends Convert {
 
     private vps: string[] = [];
     private includeProtocol: string[] = [];
-
-    constructor(vps: string[], existedVps: string[] = [], protocol: string | null = '') {
+    private excludeTag: string[] = [];
+    constructor(vps: string[], existedVps: string[] = [], protocol: string | null = '', exclude: string | null = '') {
         super(existedVps);
         this.vps = vps;
         this.includeProtocol = protocol ? JSON.parse(protocol) : [];
+        this.excludeTag = exclude ? JSON.parse(exclude) : [];
     }
 
     public async parse(vps: string[] = this.vps): Promise<void> {
@@ -39,7 +44,9 @@ export class Parser extends Convert {
                 if (processVps) {
                     let parser: ParserType | null = null;
 
-                    if (processVps.startsWith('vless://') && this.hasProtocol('vless')) {
+                    if (processVps.startsWith('anytls://') && this.hasProtocol('anytls')) {
+                        parser = new AnytlsParser(processVps);
+                    } else if (processVps.startsWith('vless://') && this.hasProtocol('vless')) {
                         parser = new VlessParser(processVps);
                     } else if (processVps.startsWith('vmess://') && this.hasProtocol('vmess')) {
                         parser = new VmessParser(processVps);
@@ -51,6 +58,8 @@ export class Parser extends Convert {
                         parser = new SsrParser(processVps);
                     } else if (this.isHysteria2(processVps) && this.hasProtocol('hysteria', 'hysteria2', 'hy2')) {
                         parser = new Hysteria2Parser(processVps);
+                    } else if (processVps.startsWith('tuic://') && this.hasProtocol('tuic')) {
+                        parser = new TuicParser(processVps);
                     }
 
                     if (parser) {
@@ -83,6 +92,10 @@ export class Parser extends Convert {
     }
 
     private setStore(v: string, parser: ParserType): void {
+        const tag = parser.tag;
+        if (tag && this.excludeTag.includes(tag)) {
+            return;
+        }
         this.urlSet.add(parser.confuseLink);
         this.originUrls.add(v);
         this.vpsStore.set(parser.confusePs, parser);

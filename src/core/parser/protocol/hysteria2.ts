@@ -22,6 +22,9 @@ export class Hysteria2Parser extends Faker {
     /** * @description 混淆备注 */
     #confusePs: string = '';
 
+    /** * @description 区域 */
+    #tag: string = '';
+
     constructor(v: string) {
         super();
         this.#confusePs = crypto.randomUUID();
@@ -39,6 +42,7 @@ export class Hysteria2Parser extends Faker {
         this.#originLink = v;
         this.#originConfig = new URL(v);
         this.#originPs = this.#originConfig.hash ?? '';
+        this.#tag = this.getTag(this.#originConfig.hash) ?? '';
     }
 
     /**
@@ -66,12 +70,15 @@ export class Hysteria2Parser extends Faker {
         this.#confuseLink = this.#confuseConfig.href!;
     }
 
-    public restoreClash(proxy: Record<string, string | number>, ps: string): Record<string, string | number> {
+    public restoreClash(proxy: Record<string, string | number | boolean>, ps: string): Record<string, string | number | boolean> {
         proxy.name = ps;
         proxy.server = this.originConfig.hostname ?? '';
         proxy.port = Number(this.originConfig.port ?? 0);
         if (proxy.type === 'hysteria2' && hasKey(proxy, 'password')) {
-            proxy.password = this.originConfig?.searchParams?.get('password') ?? '';
+            proxy.password = this.originConfig?.searchParams?.get('password') ?? this.originConfig.username ?? '';
+        }
+        if (proxy.type === 'hysteria2' && hasKey(proxy, 'auth')) {
+            proxy.auth = this.originConfig?.searchParams?.get('auth') ?? this.originConfig.username ?? '';
         }
 
         if (hasKey(proxy, 'down')) {
@@ -95,11 +102,14 @@ export class Hysteria2Parser extends Faker {
         if (this.originConfig.searchParams?.has('sni')) {
             proxy.sni = this.originConfig.searchParams?.get('sni') ?? '';
         }
+        if (this.originConfig.searchParams?.has('insecure')) {
+            proxy['skip-cert-verify'] = this.originConfig.searchParams.get('insecure') === '1';
+        }
 
         return proxy;
     }
 
-    public restoreSingbox(outbound: Record<string, string | number>, ps: string): Record<string, string | number> {
+    public restoreSingbox(outbound: Record<string, any>, ps: string): Record<string, any> {
         outbound.password = this.originConfig?.searchParams?.get('password') ?? '';
         outbound.server = this.originConfig.hostname ?? '';
         outbound.server_port = Number(this.originConfig.port ?? 0);
@@ -109,6 +119,9 @@ export class Hysteria2Parser extends Faker {
         }
         if (outbound.up) {
             outbound.up = decodeURIComponent(outbound.up as string);
+        }
+        if (outbound.tls && this.originConfig.searchParams?.has('insecure')) {
+            outbound.tls.insecure = this.originConfig.searchParams.get('insecure') === '1';
         }
         return outbound;
     }
@@ -157,6 +170,10 @@ export class Hysteria2Parser extends Faker {
      */
     get confuseConfig(): Partial<Hysteria2Config> {
         return this.#confuseConfig;
+    }
+
+    get tag(): string | null {
+        return this.#tag ?? null;
     }
 }
 

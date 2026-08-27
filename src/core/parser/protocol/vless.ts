@@ -22,6 +22,8 @@ export class VlessParser extends Faker {
     /** * @description 混淆备注 */
     #confusePs: string = '';
 
+    #tag: string = '';
+
     constructor(v: string) {
         super();
         this.#confusePs = crypto.randomUUID();
@@ -39,6 +41,7 @@ export class VlessParser extends Faker {
         this.#originLink = v;
         this.#originConfig = new URL(v);
         this.#originPs = PsUtil.formatPs(this.#originConfig.hash) ?? '';
+        this.#tag = this.getTag(this.#originConfig.hash) ?? '';
     }
 
     /**
@@ -153,6 +156,10 @@ export class VlessParser extends Faker {
      */
     get confuseConfig(): Partial<VlessConfig> {
         return this.#confuseConfig;
+    }
+
+    get tag(): string | null {
+        return this.#tag ?? null;
     }
 }
 

@@ -75,8 +75,28 @@ export function layout(): string {
                 text-align: center;
             }
 
+            main > header > .header__right {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                min-width: 25px;
+                justify-content: flex-end;
+            }
+
+            main > header > .header__right > .header__nav {
+                color: var(--text-secondary, var(--text-primary));
+                text-decoration: none;
+                font-size: 13px;
+                white-space: nowrap;
+                transition: var(--transition);
+            }
+
+            main > header > .header__right > .header__nav:hover {
+                color: var(--primary-color);
+            }
+
             /* 主题切换按钮样式优化 */
-            main > header > .header__theme {
+            main > header .header__theme {
                 padding: 5px 10px;
                 border-radius: var(--radius);
                 border: 1px solid var(--border-color);
@@ -90,13 +110,13 @@ export function layout(): string {
                 gap: 6px;
             }
 
-            main > header > .header__theme:hover {
+            main > header .header__theme:hover {
                 border-color: var(--primary-color);
                 color: var(--primary-color);
             }
 
             /* 添加主题图标 */
-            main > header > .header__theme::before {
+            main > header .header__theme::before {
                 content: '';
                 width: 16px;
                 height: 16px;
@@ -107,18 +127,144 @@ export function layout(): string {
             }
 
             /* 暗色主题图标 */
-            :root[theme='dark'] main > header > .header__theme::before {
+            :root[theme='dark'] main > header .header__theme::before {
                 background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Cpath d='M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z'/%3E%3C/svg%3E");
             }
 
             /* 亮色主题图标 */
-            :root:not([theme='dark']) main > header > .header__theme::before {
+            :root:not([theme='dark']) main > header .header__theme::before {
                 background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 0 0 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z'/%3E%3C/svg%3E");
+            }
+
+            main > header .header__chat {
+                padding: 5px 10px;
+                border-radius: var(--radius);
+                border: 1px solid var(--border-color);
+                background: var(--background);
+                color: var(--text-primary);
+                cursor: pointer;
+                transition: var(--transition);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 32px;
+                box-sizing: border-box;
+            }
+
+            main > header .header__chat svg {
+                width: 16px;
+                height: 16px;
+                display: block;
+            }
+
+            main > header .header__chat:hover {
+                border-color: var(--primary-color);
+                color: var(--primary-color);
             }
 
             main > section {
                 margin-top: 20px;
                 padding: 0 20px;
+            }
+
+            main > section.short-url-list {
+                margin-top: 8px;
+                padding-bottom: 20px;
+            }
+
+            html.short-url-page,
+            html.short-url-page body {
+                height: 100%;
+                overflow: hidden;
+            }
+
+            html.short-url-page body {
+                align-items: stretch;
+                justify-content: flex-start;
+            }
+
+            html.short-url-page main {
+                width: min(1200px, calc(100% - 40px));
+                max-width: 1200px;
+                height: calc(100vh - 40px);
+                margin: 20px auto;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                box-sizing: border-box;
+            }
+
+            html.short-url-page main > header {
+                flex-shrink: 0;
+            }
+
+            html.short-url-page main > section.short-url-list {
+                flex: 1;
+                min-height: 0;
+                margin-top: 0;
+                padding: 12px 20px 16px;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                box-sizing: border-box;
+            }
+
+            html.short-url-page .short-url-toolbar {
+                flex-shrink: 0;
+            }
+
+            html.short-url-page #short-url-table {
+                flex: 1;
+                min-height: 0;
+            }
+
+            html.short-url-page .short-url-pagination {
+                flex-shrink: 0;
+                margin-top: 12px;
+            }
+
+            .short-url-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                margin-bottom: 12px;
+            }
+
+            .short-url-pagination {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                margin-top: 16px;
+                color: var(--text-secondary, var(--text-primary));
+                font-size: 13px;
+            }
+
+            .short-url-pagination[hidden] {
+                display: none !important;
+            }
+
+            .short-url-pagination button {
+                appearance: none;
+                border: 1px solid var(--border-color);
+                background: var(--background);
+                color: var(--text-primary);
+                border-radius: var(--radius);
+                padding: 4px 12px;
+                height: 32px;
+                cursor: pointer;
+                transition: var(--transition);
+            }
+
+            .short-url-pagination button:hover:not(:disabled) {
+                color: var(--primary-color);
+                border-color: var(--primary-color);
+            }
+
+            .short-url-pagination button:disabled {
+                cursor: not-allowed;
+                color: var(--text-disabled);
+                background: var(--background-disabled);
             }
         
         </style>`;
