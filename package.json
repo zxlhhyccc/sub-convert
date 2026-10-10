@@ -20,7 +20,10 @@
         "docker:build": "docker build -t sub-convert .",
         "docker:run": "docker run --rm -p 3000:3000 -v sub-data:/data sub-convert",
         "lint": "eslint .",
-        "lint:fix": "eslint . --fix"
+        "lint:fix": "eslint . --fix",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "bench": "vitest bench test/core/confuse/clash.bench.ts"
     },
     "dependencies": {
         "@hono/node-server": "^2.0.0",
@@ -41,7 +44,7 @@
         "tsdown": "^0.21.9",
         "tsx": "^4.21.0",
         "typescript": "^5.7.2",
+        "vitest": "^5.0.3",
         "wrangler": "^4.84.0"
     }
 }
-

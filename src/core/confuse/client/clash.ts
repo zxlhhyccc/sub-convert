@@ -5,104 +5,101 @@ import { load } from 'js-yaml';
 export class ClashClient {
     public async getConfig(urls: string[]): Promise<ClashType> {
         try {
-            const configs = await Promise.all(urls.map(url => fetchWithRetry(url, { retries: 3 }).then(r => r.data.text())));
-            const clashConfigs = configs.map(config => load(config) as ClashType);
-            const mergedConfig = this.mergeClashConfig(clashConfigs);
-            return mergedConfig;
+            // 并行拉取各订阅文本以降低延迟；解析与合并在 mergeClashConfig 内逐个进行，
+            // 避免同时在内存中驻留所有订阅的「解析后对象树」(Worker 内存上限 128MB)。
+            const rawConfigs = await Promise.all(urls.map(url => fetchWithRetry(url, { retries: 3 }).then(r => r.data.text())));
+            return this.mergeClashConfig(rawConfigs);
         } catch (error: any) {
             throw new Error(`Failed to get clash config: ${error.message || error}`);
         }
     }
 
     /**
-     * 对比两个 proxies 数组是否完全相同
-     * 使用 Set 对比，忽略顺序差异
-     */
-    private isSameProxies(arr1: string[], arr2: string[]): boolean {
-        if (arr1.length !== arr2.length) return false;
-        const set1 = new Set(arr1);
-        return arr2.every(item => set1.has(item));
-    }
-
-    /**
-     * 合并两个 proxies 数组，去重并保持顺序
-     * 时间复杂度: O(n)，使用 Set 优化查找
-     */
-    private mergeGroupProxies(existing: string[], incoming: string[]): string[] {
-        const seen = new Set(existing);
-        const result = [...existing];
-        for (const proxy of incoming) {
-            if (!seen.has(proxy)) {
-                seen.add(proxy);
-                result.push(proxy);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * @description 合并配置
-     * @param {ClashType[]} configs
+     * @description 逐个解析并合并 Clash 配置
+     * - proxies: 直接追加，保留重复节点（不做去重）
+     * - proxy-groups: 按组名合并，组内引用去重并保持顺序
+     * 内存优化：边解析边合并，解析完立即释放原始文本，任一时刻最多只持有一份解析树。
+     * @param {string[]} rawConfigs 各订阅的原始 YAML 文本
      * @returns {ClashType} mergedConfig
      */
-    private mergeClashConfig(configs: ClashType[] = []): ClashType {
+    private mergeClashConfig(rawConfigs: string[] = []): ClashType {
         try {
-            if (!configs.length) {
+            if (!rawConfigs.length) {
                 return {} as ClashType;
             }
 
-            // 如果只有一个配置，直接返回
-            if (configs.length === 1) {
-                return configs[0];
+            // 只有一个配置时直接解析返回
+            if (rawConfigs.length === 1) {
+                return load(rawConfigs[0]) as ClashType;
             }
 
-            // 合并 proxies: 直接展开所有配置的 proxies
-            const mergedProxies: Array<Record<string, string>> = [];
-            for (const config of configs) {
-                if (config.proxies?.length) {
-                    mergedProxies.push(...config.proxies);
-                }
-            }
+            // 使用局部别名以便在解析后释放原始文本（不直接改写入参）
+            const sources = rawConfigs;
 
-            // 合并 proxy-groups: 使用 Map 存储，O(1) 查找
-            const groupMap = new Map<string, ClashType['proxy-groups'][0]>();
+            // proxies: 保留重复，直接追加
+            const mergedProxies: ClashType['proxies'] = [];
+
+            // proxy-groups: 每个分组维护一个常驻 Set 做 O(1) 去重，并原地 push，
+            // 避免每并入一份配置就重建 Set / 全量复制数组（原实现对订阅数近似二次）。
+            const groupMap = new Map<string, ClashType['proxy-groups'][number]>();
+            const groupSeen = new Map<string, Set<string>>();
             const groupOrder: string[] = [];
 
-            for (const config of configs) {
-                if (!config['proxy-groups']?.length) continue;
+            // 仅保留第一个配置里除 proxies / proxy-groups 外的其他字段（如 rules、dns 等），
+            // 这样第一份配置的 proxies/proxy-groups 原始容器可被尽早回收。
+            let base: Record<string, any> | null = null;
 
-                for (const group of config['proxy-groups']) {
-                    const existingGroup = groupMap.get(group.name);
+            for (let i = 0; i < sources.length; i++) {
+                const config = load(sources[i]) as ClashType;
+                // 解析完立即释放原始文本，便于 GC 回收
+                sources[i] = '';
 
-                    if (!existingGroup) {
-                        // Map 中不存在该组名，直接添加
-                        groupMap.set(group.name, {
-                            ...group,
-                            proxies: [...(group.proxies || [])] // 浅拷贝数组
-                        });
-                        groupOrder.push(group.name);
-                    } else {
-                        // Map 中已存在该组名，判断 proxies 是否相同
-                        const existingProxies = existingGroup.proxies || [];
-                        const incomingProxies = group.proxies || [];
-
-                        if (!this.isSameProxies(existingProxies, incomingProxies)) {
-                            // proxies 不同，合并差异部分
-                            existingGroup.proxies = this.mergeGroupProxies(existingProxies, incomingProxies);
+                if (base === null) {
+                    base = {};
+                    for (const key of Object.keys(config)) {
+                        if (key !== 'proxies' && key !== 'proxy-groups') {
+                            base[key] = (config as Record<string, any>)[key];
                         }
-                        // proxies 相同则跳过，保持不变
                     }
                 }
+
+                // proxies: 逐个追加（用循环而非 push(...spread)，规避超大数组的参数上限）
+                if (config.proxies?.length) {
+                    for (const proxy of config.proxies) {
+                        mergedProxies.push(proxy);
+                    }
+                }
+
+                // proxy-groups: 按组名合并，组内去重并保持顺序
+                const groups = config['proxy-groups'];
+                if (groups?.length) {
+                    for (const group of groups) {
+                        const existingGroup = groupMap.get(group.name);
+                        if (!existingGroup) {
+                            const proxies = [...(group.proxies ?? [])];
+                            groupMap.set(group.name, { ...group, proxies });
+                            groupSeen.set(group.name, new Set(proxies));
+                            groupOrder.push(group.name);
+                        } else {
+                            const seen = groupSeen.get(group.name)!;
+                            const target = existingGroup.proxies!;
+                            for (const proxy of group.proxies ?? []) {
+                                if (!seen.has(proxy)) {
+                                    seen.add(proxy);
+                                    target.push(proxy);
+                                }
+                            }
+                        }
+                    }
+                }
+                // 本轮解析树 config 不再被引用（proxy 对象已被 mergedProxies 持有），可被 GC
             }
 
-            // 构建合并后的配置
-            const mergedConfig: ClashType = {
-                ...configs[0], // 保留第一个配置的其他属性
+            return {
+                ...(base as ClashType),
                 proxies: mergedProxies,
                 'proxy-groups': groupOrder.map(name => groupMap.get(name)!)
             };
-
-            return mergedConfig;
         } catch (error: any) {
             throw new Error(`Failed to merge clash config: ${error.message || error}`);
         }
