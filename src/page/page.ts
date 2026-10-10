@@ -304,7 +304,15 @@ export function showPage(request: Request, env: Env): Response {
                                 }
                             });
 
-                            this.#generateSubBtn.addEventListener('click', () => {
+                            this.#generateSubBtn.addEventListener('click', async () => {
+                                // 先清空已有的订阅链接和短链，延迟一秒后再生成，便于直观看出链接已更新
+                                this.#formSubscribe.value = '';
+                                this.#formShortUrl.value = '';
+                                this.#model.subUrl = '';
+                                this.#model.shortUrl = '';
+                                this.#generateShortUrlBtn.setAttribute('disabled', '');
+                                await new Promise(resolve => setTimeout(resolve, 500));
+
                                 const url = new URL(this.#model.backend + '/sub');
                                 url.searchParams.set('target', this.#model.target);
                                 url.searchParams.set('url', this.#model.url);
@@ -333,6 +341,11 @@ export function showPage(request: Request, env: Env): Response {
                                     notification.error('短链服务不存在');
                                     return;
                                 }
+
+                                // 先清空已有的短链，延迟一秒后再生成，便于直观看出链接已更新
+                                this.#formShortUrl.value = '';
+                                this.#model.shortUrl = '';
+                                await new Promise(resolve => setTimeout(resolve, 500));
 
                                 // 构建请求数据
                                 const requestData = {
