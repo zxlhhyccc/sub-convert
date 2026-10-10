@@ -1,7 +1,7 @@
 /**
  * 将 Vless 配置对象转换为 Vless 标准协议 URL
  * @param {object} config - Vless 配置对象
- * @returns {string} Vless 标准协议 URL (trojan://...)
+ * @returns {string} Vless 标准协议 URL (vless://...)
  * @throws {Error} 如果缺少必要的配置字段
  */
 export function vlessConvert(config: Record<string, any>): string {
@@ -17,8 +17,13 @@ export function vlessConvert(config: Record<string, any>): string {
     const port = config.port;
     const nameFragment = `#${encodeURIComponent(config.name || 'vless-node')}`;
 
+    // 注意：URLSearchParams 在 toString() 时会自动做一次百分号编码，
+    // 因此这里所有的值都必须是原始值，绝对不要再手动 encodeURIComponent，否则会二次编码。
     const params = new URLSearchParams();
     const network = config.network || 'tcp';
+
+    // VLESS 本身不加密，标准分享链接固定携带 encryption=none
+    params.set('encryption', 'none');
 
     let securityLayer = 'none';
 
@@ -37,17 +42,14 @@ export function vlessConvert(config: Record<string, any>): string {
             params.set('sni', config.servername);
         }
         if (Array.isArray(config.alpn) && config.alpn.length > 0) {
-            params.set('alpn', encodeURIComponent(config.alpn.join(',')));
+            params.set('alpn', config.alpn.join(','));
         }
         const fingerprint = config['client-fingerprint'] || config.fingerprint;
         if (fingerprint) {
-            params.set('fp', encodeURIComponent(fingerprint));
+            params.set('fp', fingerprint);
         }
         if (config['skip-cert-verify'] === true) {
             params.set('allowInsecure', '1');
-        }
-        if (config.flow) {
-            params.set('flow', config.flow);
         }
     } else if (securityLayer === 'reality') {
         params.set('security', 'reality');
@@ -60,16 +62,21 @@ export function vlessConvert(config: Record<string, any>): string {
         const shortId = realityOpts['short-id'] || realityOpts.shortId;
 
         if (publicKey) {
-            params.set('pbk', encodeURIComponent(publicKey));
+            params.set('pbk', publicKey);
         }
         if (shortId) {
-            params.set('sid', encodeURIComponent(shortId));
+            params.set('sid', shortId);
         }
 
         const fingerprint = config['client-fingerprint'] || config.fingerprint;
         if (fingerprint) {
-            params.set('fp', encodeURIComponent(fingerprint));
+            params.set('fp', fingerprint);
         }
+    }
+
+    // flow (如 xtls-rprx-vision) 对 tls 与 reality 都适用，需统一处理
+    if (config.flow && (securityLayer === 'tls' || securityLayer === 'reality')) {
+        params.set('flow', config.flow);
     }
 
     switch (network) {
@@ -84,7 +91,7 @@ export function vlessConvert(config: Record<string, any>): string {
                     params.set('host', config['ws-opts'].headers.Host);
                 }
                 if (config['ws-opts'].path) {
-                    params.set('path', encodeURIComponent(config['ws-opts'].path));
+                    params.set('path', config['ws-opts'].path);
                 }
             }
             break;
@@ -98,7 +105,7 @@ export function vlessConvert(config: Record<string, any>): string {
                 // gRPC service name
                 const serviceName = config['grpc-opts']['grpc-service-name'];
                 if (serviceName) {
-                    params.set('serviceName', encodeURIComponent(serviceName));
+                    params.set('serviceName', serviceName);
                 }
             }
             break;
@@ -108,10 +115,10 @@ export function vlessConvert(config: Record<string, any>): string {
             }
             if (config['quic-opts']) {
                 if (config['quic-opts'].security && config['quic-opts'].security !== 'none') {
-                    params.set('quicSecurity', encodeURIComponent(config['quic-opts'].security));
+                    params.set('quicSecurity', config['quic-opts'].security);
                 }
                 if (config['quic-opts'].key) {
-                    params.set('key', encodeURIComponent(config['quic-opts'].key));
+                    params.set('key', config['quic-opts'].key);
                 }
                 if (config['quic-opts'].header?.type && config['quic-opts'].header.type !== 'none') {
                     params.set('headerType', config['quic-opts'].header.type);
@@ -124,7 +131,7 @@ export function vlessConvert(config: Record<string, any>): string {
                     params.set('host', config['httpupgrade-opts'].host);
                 }
                 if (config['httpupgrade-opts'].path) {
-                    params.set('path', encodeURIComponent(config['httpupgrade-opts'].path));
+                    params.set('path', config['httpupgrade-opts'].path);
                 }
             }
             break;
@@ -135,12 +142,12 @@ export function vlessConvert(config: Record<string, any>): string {
             if (config['h2-opts']) {
                 const h2Host = config['h2-opts'].host;
                 if (Array.isArray(h2Host) && h2Host.length > 0) {
-                    params.set('host', encodeURIComponent(h2Host.join(',')));
+                    params.set('host', h2Host.join(','));
                 } else if (typeof h2Host === 'string') {
-                    params.set('host', encodeURIComponent(h2Host));
+                    params.set('host', h2Host);
                 }
                 if (config['h2-opts'].path) {
-                    params.set('path', encodeURIComponent(config['h2-opts'].path));
+                    params.set('path', config['h2-opts'].path);
                 }
             }
             break;

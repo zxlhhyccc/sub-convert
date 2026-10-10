@@ -39,6 +39,11 @@ export function shadowsocksRConvert(config: Record<string, any>): string {
         const protocolParamBase64 = base64UrlEncode(protocolParam);
         paramsForEncoding.append('protoparam', protocolParamBase64);
     }
+    // SSR 规范：备注(remarks)属于参数的一部分，使用 base64url 编码后拼入主体再整体编码，
+    // 而不是作为 URL 的 #fragment。标准 SSR 客户端只会从 remarks 参数读取节点名。
+    if (remarks) {
+        paramsForEncoding.append('remarks', base64UrlEncode(remarks));
+    }
 
     const paramsStringForEncoding = paramsForEncoding.toString();
     if (paramsStringForEncoding) {
@@ -47,14 +52,5 @@ export function shadowsocksRConvert(config: Record<string, any>): string {
 
     const base64EncodedString = base64UrlEncode(coreString);
 
-    const encodedRemarks = encodeURIComponent(remarks);
-
-    let ssrUrl = `ssr://${base64EncodedString}`;
-
-    // 添加备注 (如果存在)
-    if (remarks) {
-        ssrUrl += `#${encodedRemarks}`;
-    }
-
-    return ssrUrl;
+    return `ssr://${base64EncodedString}`;
 }

@@ -1,8 +1,7 @@
 import { base64Encode } from 'cloudflare-tools';
-import { hasKey } from '../../../../shared';
 
 /**
- * 将 Hysteria 配置对象转换为 Hysteria 标准协议 URL
+ * 将 Hysteria(v1) 配置对象转换为 Hysteria 标准协议 URL
  * @param {object} config - Hysteria 配置对象
  * @returns {string} Hysteria 标准协议 URL (hysteria://...)
  * @throws {Error} 如果缺少必要的配置字段
@@ -20,8 +19,17 @@ export function hysteriaConvert(config: Record<string, any>): string {
 
     const parameters = new URLSearchParams();
 
+    // 传输协议，Hysteria v1 默认 udp (可选 wechat-video / faketcp)
+    parameters.append('protocol', config.protocol || 'udp');
+
     // 核心认证参数
     parameters.append('auth', auth);
+
+    // 服务器名称校验 (Hysteria v1 使用 peer 表示 SNI)
+    const peer = config.sni || config.servername;
+    if (peer) {
+        parameters.append('peer', peer);
+    }
 
     if (config.peerCA) {
         parameters.append('peerCA', base64Encode(config.peerCA).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')); // peerCA 通常 Base64 编码
@@ -32,34 +40,28 @@ export function hysteriaConvert(config: Record<string, any>): string {
         parameters.append('alpn', Array.isArray(config.alpn) ? config.alpn.join(',') : config.alpn);
     }
 
-    if (config.upmbps !== undefined && config.upmbps !== null) {
-        parameters.append('upmbps', config.upmbps.toString());
+    // 带宽：优先 upmbps/downmbps，其次从 Clash 的 up/down (如 "100 Mbps") 解析出数值
+    const parseMbps = (v: unknown): number | undefined => {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = Number.parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : undefined;
+    };
+    const upmbps = config.upmbps ?? parseMbps(config.up);
+    const downmbps = config.downmbps ?? parseMbps(config.down);
+    if (upmbps !== undefined && upmbps !== null) {
+        parameters.append('upmbps', String(upmbps));
     }
-    if (config.downmbps !== undefined && config.downmbps !== null) {
-        parameters.append('downmbps', config.downmbps.toString());
+    if (downmbps !== undefined && downmbps !== null) {
+        parameters.append('downmbps', String(downmbps));
     }
 
+    // 混淆：Hysteria v1 使用 obfs + obfsParam
     if (config.obfs) {
         parameters.append('obfs', config.obfs);
     }
-    if (config['obfs-param']) {
-        parameters.append('obfs-param', config['obfs-param']);
-    }
-
-    if (hasKey(config, 'up')) {
-        parameters.append('up', config.up);
-    }
-
-    if (hasKey(config, 'down')) {
-        parameters.append('down', config.down);
-    }
-
-    if (hasKey(config, 'delay')) {
-        parameters.append('delay', config.delay);
-    }
-
-    if (hasKey(config, 'sni')) {
-        parameters.append('sni', config.sni);
+    const obfsParam = config['obfs-param'] ?? config.obfsParam;
+    if (obfsParam) {
+        parameters.append('obfsParam', obfsParam);
     }
 
     const queryString = parameters.toString();

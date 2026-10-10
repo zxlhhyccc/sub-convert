@@ -11,6 +11,8 @@ export function vmessConvert(config: Record<string, any>): string {
         throw new Error('Vmess configuration object must contain server, port, and uuid.');
     }
 
+    const network = config.network || 'tcp';
+
     const uriJson: Record<string, any> = {
         v: '2', // Vmess 协议版本，通常是 2
         ps: config.name || '',
@@ -19,7 +21,8 @@ export function vmessConvert(config: Record<string, any>): string {
         id: config.uuid,
         aid: config.alterId || 0,
         scy: config.cipher || 'auto',
-        net: config.network || 'tcp'
+        net: network,
+        type: 'none' // header 伪装类型，默认 none
     };
 
     // 处理 TLS 相关配置
@@ -29,16 +32,18 @@ export function vmessConvert(config: Record<string, any>): string {
         if (config['client-fingerprint']) {
             uriJson.fp = config['client-fingerprint'];
         }
+        if (config.alpn && (typeof config.alpn === 'string' || Array.isArray(config.alpn))) {
+            uriJson.alpn = Array.isArray(config.alpn) ? config.alpn.join(',') : config.alpn;
+        }
         // skip-cert-verify 通常是客户端选项，不包含在标准 URI 中
     } else {
         uriJson.tls = ''; // 关闭 TLS
     }
 
     // 处理不同的网络类型配置 (network)
-    switch (uriJson.net) {
-        case 'ws':
-        case 'http': {
-            const opts = config['ws-opts'] || config['http-opts'] || {};
+    switch (network) {
+        case 'ws': {
+            const opts = config['ws-opts'] || {};
             if (opts.headers && opts.headers.Host) {
                 uriJson.host = opts.headers.Host;
             } else if (uriJson.sni) {
@@ -46,37 +51,69 @@ export function vmessConvert(config: Record<string, any>): string {
             } else {
                 uriJson.host = uriJson.add;
             }
-            // Path 字段
             uriJson.path = opts.path || '/';
-            if (uriJson.net === 'http' && !config.tls) {
-                uriJson.type = 'http';
-            } else if (uriJson.net === 'ws' && !config.tls) {
-                uriJson.type = 'ws';
+            break;
+        }
+        case 'http': {
+            // HTTP 伪装：在 vmess 分享格式中表示为 net=tcp + type=http (header 伪装类型)
+            const opts = config['http-opts'] || {};
+            uriJson.net = 'tcp';
+            uriJson.type = 'http';
+            const hosts = opts.headers?.Host;
+            if (Array.isArray(hosts) && hosts.length > 0) {
+                uriJson.host = hosts.join(',');
+            } else if (typeof hosts === 'string') {
+                uriJson.host = hosts;
+            } else {
+                uriJson.host = uriJson.sni || uriJson.add;
             }
-
+            uriJson.path = Array.isArray(opts.path) ? opts.path[0] || '/' : opts.path || '/';
+            break;
+        }
+        case 'h2': {
+            const opts = config['h2-opts'] || {};
+            const hosts = opts.host;
+            if (Array.isArray(hosts) && hosts.length > 0) {
+                uriJson.host = hosts.join(',');
+            } else if (typeof hosts === 'string') {
+                uriJson.host = hosts;
+            }
+            uriJson.path = opts.path || '/';
+            break;
+        }
+        case 'grpc': {
+            // gRPC 需要 serviceName
+            const grpcOpts = config['grpc-opts'] || {};
+            const serviceName = grpcOpts['grpc-service-name'] || grpcOpts.serviceName;
+            if (serviceName) {
+                uriJson.serviceName = serviceName;
+            }
             break;
         }
         case 'tcp':
-            if (!config.tls) {
-                uriJson.type = 'none';
+        default: {
+            // tcp 下的 http 伪装 (tcp-opts.header.type === 'http')
+            if (config['tcp-opts']?.header?.type === 'http') {
+                uriJson.type = 'http';
+                const hosts = config['tcp-opts']?.header?.request?.headers?.Host;
+                if (Array.isArray(hosts) && hosts.length > 0) {
+                    uriJson.host = hosts.join(',');
+                } else if (typeof hosts === 'string') {
+                    uriJson.host = hosts;
+                }
+                const path = config['tcp-opts']?.header?.request?.path;
+                uriJson.path = Array.isArray(path) ? path[0] || '/' : path || '/';
             }
             break;
-        case 'grpc':
-            // gRPC 需要 serviceName
-            if (config['grpc-opts'] && config['grpc-opts'].serviceName) {
-                uriJson.serviceName = config['grpc-opts'].serviceName;
-            }
-
-            uriJson.type = 'grpc';
-            break;
+        }
     }
 
-    if (uriJson.type === 'none' || (uriJson.net === uriJson.type && !config.tls)) {
+    // header 伪装为 none 时无需携带 type 字段
+    if (uriJson.type === 'none') {
         delete uriJson.type;
     }
 
     uriJson.tfo = config.tfo ? '1' : '0';
-
     uriJson.udp = config.udp ? '1' : '0';
 
     const jsonString = JSON.stringify(uriJson);

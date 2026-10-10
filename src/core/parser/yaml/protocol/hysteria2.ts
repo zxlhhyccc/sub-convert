@@ -16,8 +16,6 @@ export function hysteria2Convert(config: Record<string, any>): string {
 
     const parameters = new URLSearchParams();
 
-    parameters.append('password', password);
-
     // TLS/安全性 相关参数
     const sni = config.sni || config.servername || config.server;
     if (sni) {
@@ -29,24 +27,22 @@ export function hysteria2Convert(config: Record<string, any>): string {
         parameters.append('alpn', Array.isArray(config.alpn) ? config.alpn.join(',') : config.alpn);
     }
 
-    // 混淆 Obfs 参数 (H2 的 obfs 类型可能与 H1 不同)
+    // 混淆 Obfs 参数 (Hysteria2 只支持 obfs=salamander + obfs-password，没有 obfs-param)
     if (config.obfs) {
         parameters.append('obfs', config.obfs);
     }
-    if (config['obfs-param']) {
-        parameters.append('obfs-param', config['obfs-param']);
-    }
-
     if (config['obfs-password']) {
         parameters.append('obfs-password', config['obfs-password']);
     }
 
     const queryString = parameters.toString();
 
+    // Hysteria2 规范：认证信息放在 userinfo 中 (hysteria2://password@host:port)，而不是 query 参数
+    const encodedPassword = encodeURIComponent(password);
     const encodedServer = encodeURIComponent(server);
     const encodedRemarks = encodeURIComponent(remarks);
 
-    let hysteria2Url = `hysteria2://${encodedServer}:${port}`;
+    let hysteria2Url = `hysteria2://${encodedPassword}@${encodedServer}:${port}`;
     if (queryString) {
         hysteria2Url += `?${queryString}`;
     }
